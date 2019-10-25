@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use rand::distributions::{Distribution, WeightedIndex};
+use rand::Rng;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 pub struct Model<T> {
-    pub nodes: Vec<Node<T>>,
+    nodes: Vec<Node<T>>,
 }
 
 impl<T> Model<T>
@@ -44,7 +46,64 @@ where
 }
 
 pub struct Node<T> {
-    pub item: T,
-    pub children: Vec<T>,
-    pub weights: Vec<u32>,
+    item: T,
+    children: Vec<T>,
+    weights: Vec<u32>,
+}
+
+pub struct Generator<'m, 'r, T, R> {
+    model: &'m Model<T>,
+    map: HashMap<&'m T, &'m Node<T>>,
+    used: HashSet<&'m T>,
+    last: Option<&'m Node<T>>,
+    rng: &'r mut R,
+}
+
+impl<'m, 'r, T, R> Generator<'m, 'r, T, R>
+where
+    T: Hash + Eq,
+{
+    pub fn new(model: &'m Model<T>, rng: &'r mut R) -> Generator<'m, 'r, T, R> {
+        Generator {
+            model: model,
+            map: model.nodes.iter().map(|node| (&node.item, node)).collect(),
+            used: HashSet::new(),
+            last: None,
+            rng: rng,
+        }
+    }
+}
+
+impl<'m, 'r, T, R> Iterator for Generator<'m, 'r, T, R>
+where
+    T: Hash + Eq,
+    R: Rng,
+{
+    type Item = &'m T;
+
+    fn next(&mut self) -> Option<&'m T> {
+        loop {
+            let node = self.last.take().unwrap_or_else(|| {
+                &self.model.nodes[self.rng.gen_range(0, self.model.nodes.len())]
+            });
+            let item = if node.children.is_empty() {
+                &node.item
+            } else {
+                let idx = WeightedIndex::new(&node.weights)
+                    .unwrap()
+                    .sample(&mut self.rng);
+                &node.children[idx]
+            };
+
+            if self.used.contains(&item) {
+                self.used.clear();
+                continue;
+            }
+
+            self.used.insert(&item);
+            self.last = Some(self.map.get(&item).unwrap());
+
+            return Some(item);
+        }
+    }
 }
