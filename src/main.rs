@@ -43,7 +43,13 @@ fn main() -> ExitCode {
 
     let model = Model::new(Words::new(&data));
     let result = Generator::new(&model, &mut OsRng)
-        .map(|f| format!("{} ", f))
+        .map(|word| {
+            if word.chars().any(char::is_alphanumeric) {
+                format!(" {}", word)
+            } else {
+                format!("{}", word)
+            }
+        })
         .take(count)
         .collect::<String>();
 
